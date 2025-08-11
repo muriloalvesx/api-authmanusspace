@@ -1,0 +1,17 @@
+# Arquivos de ambiente
+.env
+
+# Bytecode Python
+__pycache__/
+*.py[cod]
+
+# Pastas de ambiente virtual
+venv/
+.env/
+
+# Logs
+*.log
+
+# Arquivos do sistema
+.DS_Store
+Thumbs.db
