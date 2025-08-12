@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, status, BackgroundTasks, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+import logging # Importando logging para mensagens informativas
 
 from .database import get_user_collection
 from .models import EduzzWebhookPayload, LoginRequest
@@ -9,10 +10,10 @@ from . import email_service
 app = FastAPI(
     title="API Eduzz Webhook",
     description="API para processar webhooks de vendas da Eduzz e autenticar usuários.",
-    version="2.0.2" # Versão Mais Robusta
+    version="2.1.0" # Versão Idempotente
 )
 
-# Configuração do CORS
+# ... (código do CORS e da instância do app continua igual) ...
 origins = ["*"]
 app.add_middleware(
     CORSMiddleware,
@@ -24,8 +25,18 @@ app.add_middleware(
 
 user_collection = get_user_collection()
 
+# --- FUNÇÃO DE BACKGROUND ATUALIZADA ---
 async def process_sale_in_background(name: str, email: str):
-    """Cria o usuário e envia o e-mail de boas-vindas."""
+    """
+    Cria o usuário e envia e-mail, mas ANTES verifica se o usuário já existe.
+    """
+    # VERIFICAÇÃO DE IDEMPOTÊNCIA: O usuário já existe?
+    existing_user = await user_collection.find_one({"email": email})
+    if existing_user:
+        logging.info(f"Usuário com e-mail {email} já existe. Ignorando a criação duplicada.")
+        return  # Para a execução aqui se o usuário já foi criado.
+
+    # Se o código continuar, significa que o usuário é novo.
     random_password = utils.generate_random_password()
     hashed_password = utils.hash_password(random_password)
     
@@ -34,7 +45,9 @@ async def process_sale_in_background(name: str, email: str):
         "email": email,
         "password": hashed_password
     }
+
     await user_collection.insert_one(user_document)
+
     await email_service.send_access_email(
         name=name, 
         email=email, 
@@ -43,9 +56,6 @@ async def process_sale_in_background(name: str, email: str):
 
 @app.post("/eduzz/webhook")
 async def eduzz_webhook(payload: EduzzWebhookPayload, background_tasks: BackgroundTasks):
-    """
-    Recebe o webhook, responde imediatamente e processa a venda em segundo plano.
-    """
     if payload.event not in ["sale.approved", "invoice_paid"]:
         return {"status": "event_ignored", "event": payload.event}
     
@@ -56,10 +66,9 @@ async def eduzz_webhook(payload: EduzzWebhookPayload, background_tasks: Backgrou
     )
     return {"status": "success - processing in background"}
 
-
+# ... (o resto do código, como /auth/login, continua o mesmo) ...
 @app.post("/auth/login")
 async def auth_login(login_data: LoginRequest):
-    """Endpoint para autenticação de usuários."""
     try:
         user = await user_collection.find_one({"email": login_data.email})
         if not user or not utils.verify_password(login_data.password, user["password"]):
@@ -76,12 +85,8 @@ async def auth_login(login_data: LoginRequest):
             detail={"status": "error", "message": str(e)}
         )
 
-# --- ENDPOINT RAIZ ATUALIZADO ---
-# Agora ele aceita explicitamente GET e HEAD.
 @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
 def root(request: Request):
     if request.method == "HEAD":
-        # Para requisições HEAD, retornamos apenas o status 200 OK sem corpo.
         return Response(status_code=status.HTTP_200_OK)
-    # Para requisições GET, retornamos a mensagem normal.
     return {"message": "API Eduzz Webhook está no ar!"}
