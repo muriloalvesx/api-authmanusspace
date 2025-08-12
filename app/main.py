@@ -1,6 +1,5 @@
-# app/main.py (VERSÃO FINAL COM BACKGROUND TASKS)
-
 from fastapi import FastAPI, HTTPException, status, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware  # <--- ESTA LINHA ESTAVA FALTANDO
 
 from .database import get_user_collection
 from .models import EduzzWebhookPayload, LoginRequest
@@ -10,10 +9,10 @@ from . import email_service
 app = FastAPI(
     title="API Eduzz Webhook",
     description="API para processar webhooks de vendas da Eduzz e autenticar usuários.",
-    version="2.0.0" # Versão Final!
+    version="2.0.1" # Versão Final Corrigida
 )
 
-# Configuração do CORS
+# Configuração do CORS para permitir requisições de outras origens (como a Eduzz)
 origins = ["*"]
 app.add_middleware(
     CORSMiddleware,
