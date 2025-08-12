@@ -1,5 +1,6 @@
-from fastapi import FastAPI, HTTPException, status
-from fastapi.middleware.cors import CORSMiddleware
+# app/main.py (VERSÃO FINAL COM BACKGROUND TASKS)
+
+from fastapi import FastAPI, HTTPException, status, BackgroundTasks
 
 from .database import get_user_collection
 from .models import EduzzWebhookPayload, LoginRequest
@@ -9,12 +10,11 @@ from . import email_service
 app = FastAPI(
     title="API Eduzz Webhook",
     description="API para processar webhooks de vendas da Eduzz e autenticar usuários.",
-    version="1.2.0"
+    version="2.0.0" # Versão Final!
 )
 
-# Configuração do CORS para permitir requisições de outras origens (como a Eduzz)
-origins = ["*"]  # Permite todas as origens
-
+# Configuração do CORS
+origins = ["*"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -25,47 +25,44 @@ app.add_middleware(
 
 user_collection = get_user_collection()
 
+# --- FUNÇÃO QUE SERÁ EXECUTADA EM SEGUNDO PLANO ---
+async def process_sale_in_background(name: str, email: str):
+    """Cria o usuário e envia o e-mail de boas-vindas."""
+    random_password = utils.generate_random_password()
+    hashed_password = utils.hash_password(random_password)
+    
+    user_document = {
+        "name": name,
+        "email": email,
+        "password": hashed_password
+    }
+
+    await user_collection.insert_one(user_document)
+
+    await email_service.send_access_email(
+        name=name, 
+        email=email, 
+        password=random_password
+    )
+
 @app.post("/eduzz/webhook")
-async def eduzz_webhook(payload: EduzzWebhookPayload):
+async def eduzz_webhook(payload: EduzzWebhookPayload, background_tasks: BackgroundTasks):
     """
-    Endpoint para receber webhooks da Eduzz.
-    Processa eventos de 'sale.approved' ou 'invoice_paid', cria o usuário e envia e-mail de acesso.
+    Recebe o webhook, responde imediatamente e processa a venda em segundo plano.
     """
-    try:
-        # 1. Tornamos a verificação de evento mais flexível
-        if payload.event not in ["sale.approved", "invoice_paid"]:
-            return {"status": "event_ignored", "event": payload.event}
+    if payload.event not in ["sale.approved", "invoice_paid"]:
+        return {"status": "event_ignored", "event": payload.event}
 
-        # 2. Extraímos os dados diretamente do payload, usando os novos nomes
-        name = payload.customer_name
-        email = payload.customer_email
+    # Adiciona a tarefa para ser executada em segundo plano
+    background_tasks.add_task(
+        process_sale_in_background, 
+        payload.customer_name, 
+        payload.customer_email
+    )
 
-        random_password = utils.generate_random_password()
-        hashed_password = utils.hash_password(random_password)
-        
-        user_document = {
-            "name": name,
-            "email": email,
-            "password": hashed_password
-        }
+    # Retorna a resposta de sucesso IMEDIATAMENTE para a Eduzz
+    return {"status": "success - processing in background"}
 
-        await user_collection.insert_one(user_document)
-
-        await email_service.send_access_email(
-            name=name, 
-            email=email, 
-            password=random_password
-        )
-
-        return {"status": "success"}
-    except Exception as e:
-        # Adiciona um log do erro para facilitar a depuração
-        import logging
-        logging.error(f"Erro inesperado no webhook: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"status": "error", "message": str(e)}
-        )
 
 @app.post("/auth/login")
 async def auth_login(login_data: LoginRequest):
