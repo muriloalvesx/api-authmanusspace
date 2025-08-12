@@ -39,7 +39,7 @@ async def send_access_email(name: str, email: str, password: str):
         <p>Sua compra foi aprovada com sucesso. Seja bem-vindo(a)!</p>
         <p>Aqui estão seus dados para acessar nossa plataforma:</p>
         <ul>
-            <li><strong>Link de Acesso:</strong> <a href="https://usiggfuq.manus.space">https://usiggfuq.manus.space</a></li>
+            <li><strong>Link de Acesso:</strong> <a href="https://calculadora-peso-bolo-fresley.vercel.app">https://calculadora-peso-bolo-fresley.vercel.app</a></li>
             <li><strong>Usuário:</strong> {email}</li>
             <li><strong>Senha:</strong> {password}</li>
         </ul>
