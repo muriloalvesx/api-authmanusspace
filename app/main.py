@@ -1,5 +1,5 @@
-from fastapi import FastAPI, HTTPException, status, BackgroundTasks
-from fastapi.middleware.cors import CORSMiddleware  # <--- ESTA LINHA ESTAVA FALTANDO
+from fastapi import FastAPI, HTTPException, status, BackgroundTasks, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 
 from .database import get_user_collection
 from .models import EduzzWebhookPayload, LoginRequest
@@ -9,10 +9,10 @@ from . import email_service
 app = FastAPI(
     title="API Eduzz Webhook",
     description="API para processar webhooks de vendas da Eduzz e autenticar usuários.",
-    version="2.0.1" # Versão Final Corrigida
+    version="2.0.2" # Versão Mais Robusta
 )
 
-# Configuração do CORS para permitir requisições de outras origens (como a Eduzz)
+# Configuração do CORS
 origins = ["*"]
 app.add_middleware(
     CORSMiddleware,
@@ -24,7 +24,6 @@ app.add_middleware(
 
 user_collection = get_user_collection()
 
-# --- FUNÇÃO QUE SERÁ EXECUTADA EM SEGUNDO PLANO ---
 async def process_sale_in_background(name: str, email: str):
     """Cria o usuário e envia o e-mail de boas-vindas."""
     random_password = utils.generate_random_password()
@@ -35,9 +34,7 @@ async def process_sale_in_background(name: str, email: str):
         "email": email,
         "password": hashed_password
     }
-
     await user_collection.insert_one(user_document)
-
     await email_service.send_access_email(
         name=name, 
         email=email, 
@@ -51,15 +48,12 @@ async def eduzz_webhook(payload: EduzzWebhookPayload, background_tasks: Backgrou
     """
     if payload.event not in ["sale.approved", "invoice_paid"]:
         return {"status": "event_ignored", "event": payload.event}
-
-    # Adiciona a tarefa para ser executada em segundo plano
+    
     background_tasks.add_task(
         process_sale_in_background, 
         payload.customer_name, 
         payload.customer_email
     )
-
-    # Retorna a resposta de sucesso IMEDIATAMENTE para a Eduzz
     return {"status": "success - processing in background"}
 
 
@@ -82,6 +76,12 @@ async def auth_login(login_data: LoginRequest):
             detail={"status": "error", "message": str(e)}
         )
 
-@app.get("/", include_in_schema=False)
-def root():
+# --- ENDPOINT RAIZ ATUALIZADO ---
+# Agora ele aceita explicitamente GET e HEAD.
+@app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
+def root(request: Request):
+    if request.method == "HEAD":
+        # Para requisições HEAD, retornamos apenas o status 200 OK sem corpo.
+        return Response(status_code=status.HTTP_200_OK)
+    # Para requisições GET, retornamos a mensagem normal.
     return {"message": "API Eduzz Webhook está no ar!"}
