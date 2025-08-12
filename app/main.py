@@ -29,15 +29,16 @@ user_collection = get_user_collection()
 async def eduzz_webhook(payload: EduzzWebhookPayload):
     """
     Endpoint para receber webhooks da Eduzz.
-    Processa eventos de 'sale.approved', cria o usuário e envia e-mail de acesso.
+    Processa eventos de 'sale.approved' ou 'invoice_paid', cria o usuário e envia e-mail de acesso.
     """
     try:
-        if payload.event != "sale.approved":
+        # 1. Tornamos a verificação de evento mais flexível
+        if payload.event not in ["sale.approved", "invoice_paid"]:
             return {"status": "event_ignored", "event": payload.event}
 
-        customer = payload.data.customer
-        name = customer.name
-        email = customer.email
+        # 2. Extraímos os dados diretamente do payload, usando os novos nomes
+        name = payload.customer_name
+        email = payload.customer_email
 
         random_password = utils.generate_random_password()
         hashed_password = utils.hash_password(random_password)
@@ -58,6 +59,9 @@ async def eduzz_webhook(payload: EduzzWebhookPayload):
 
         return {"status": "success"}
     except Exception as e:
+        # Adiciona um log do erro para facilitar a depuração
+        import logging
+        logging.error(f"Erro inesperado no webhook: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"status": "error", "message": str(e)}
