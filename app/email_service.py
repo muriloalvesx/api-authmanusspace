@@ -44,7 +44,7 @@ async def send_access_email(name: str, email: str, password: str):
             <li><strong>Senha:</strong> {password}</li>
         </ul>
         <p>Recomendamos que você altere sua senha no primeiro acesso.</p>
-        <p>Atenciosamente,<br>Equipe</p>
+        <p>Atenciosamente,<br>Equipe Fresley.</p>
     </body>
     </html>
     """
