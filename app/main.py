@@ -56,14 +56,20 @@ async def process_sale_in_background(name: str, email: str):
 
 @app.post("/eduzz/webhook")
 async def eduzz_webhook(payload: EduzzWebhookPayload, background_tasks: BackgroundTasks):
-    if payload.event not in ["sale.approved", "invoice_paid"]:
-        return {"status": "event_ignored", "event": payload.event}
+    """
+    Recebe o webhook, responde imediatamente e processa a venda em segundo plano.
+    Atualizado para a nova estrutura de webhooks da Eduzz (usando event_name).
+    """
+    # Verificando o campo 'event_name' e o valor 'invoice_paid'
+    if payload.event_name != "invoice_paid":
+        return {"status": "event_ignored", "event": payload.event_name}
     
     background_tasks.add_task(
         process_sale_in_background, 
         payload.customer_name, 
         payload.customer_email
     )
+    
     return {"status": "success - processing in background"}
 
 # ... (o resto do código, como /auth/login, continua o mesmo) ...
